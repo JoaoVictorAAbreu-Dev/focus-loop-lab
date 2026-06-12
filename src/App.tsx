@@ -3,6 +3,7 @@ import './App.css'
 
 type Priority = 'Agora' | 'Hoje' | 'Depois'
 type ViewFilter = Priority | 'Todas'
+type Screen = 'tarefas' | 'pomodoro' | 'agenda'
 
 type Task = {
   id: string
@@ -14,12 +15,15 @@ type Task = {
 }
 
 const STORAGE_KEY = 'focus-loop.tasks.v1'
+const POMODORO_KEY = 'focus-loop.pomodoro.v1'
+
+const priorities: Priority[] = ['Agora', 'Hoje', 'Depois']
 
 const seedTasks: Task[] = [
   {
     id: 'seed-1',
     title: 'Responder a mensagem que destrava o trabalho',
-    note: 'Acao curta que remove bloqueio sem virar contexto novo.',
+    note: 'Ação curta que remove bloqueio sem virar contexto novo.',
     priority: 'Agora',
     done: false,
     createdAt: Date.now() - 1000 * 60 * 60 * 4,
@@ -42,7 +46,12 @@ const seedTasks: Task[] = [
   },
 ]
 
-const priorities: Priority[] = ['Agora', 'Hoje', 'Depois']
+const agendaItems = [
+  { time: '08:30', title: 'Planejar o dia', note: 'Ver primeira tarefa e definir foco.' },
+  { time: '10:00', title: 'Bloco profundo', note: 'Uma sessão de Pomodoro sem distrações.' },
+  { time: '14:00', title: 'Responder pendências', note: 'E-mails, mensagens e retornos rápidos.' },
+  { time: '17:30', title: 'Fechamento', note: 'Revisar concluídas e preparar amanhã.' },
+]
 
 function createTask(title: string, note: string, priority: Priority): Task {
   return {
@@ -55,7 +64,25 @@ function createTask(title: string, note: string, priority: Priority): Task {
   }
 }
 
+function loadPomodoroState() {
+  try {
+    const saved = localStorage.getItem(POMODORO_KEY)
+    if (!saved) return { focus: 25 * 60, breakTime: 5 * 60, running: false, cycles: 1 }
+    return JSON.parse(saved) as { focus: number; breakTime: number; running: boolean; cycles: number }
+  } catch {
+    return { focus: 25 * 60, breakTime: 5 * 60, running: false, cycles: 1 }
+  }
+}
+
+function formatTime(seconds: number) {
+  const safeSeconds = Math.max(0, seconds)
+  const minutes = Math.floor(safeSeconds / 60)
+  const remainingSeconds = safeSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+}
+
 function App() {
+  const [screen, setScreen] = useState<Screen>('tarefas')
   const [tasks, setTasks] = useState<Task[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (!saved) return seedTasks
@@ -71,10 +98,43 @@ function App() {
   const [note, setNote] = useState('')
   const [priority, setPriority] = useState<Priority>('Agora')
   const [view, setView] = useState<ViewFilter>('Todas')
+  const [pomodoro, setPomodoro] = useState(loadPomodoroState)
+  const [activeTimer, setActiveTimer] = useState<'focus' | 'break'>('focus')
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks))
   }, [tasks])
+
+  useEffect(() => {
+    localStorage.setItem(POMODORO_KEY, JSON.stringify(pomodoro))
+  }, [pomodoro])
+
+  useEffect(() => {
+    if (!pomodoro.running) return
+
+    const interval = window.setInterval(() => {
+      setPomodoro((current) => {
+        const nextFocus = activeTimer === 'focus' ? Math.max(0, current.focus - 1) : current.focus
+        const nextBreak = activeTimer === 'break' ? Math.max(0, current.breakTime - 1) : current.breakTime
+
+        if (activeTimer === 'focus' && nextFocus === 0) {
+          return { ...current, focus: 25 * 60, breakTime: current.breakTime, running: false, cycles: current.cycles + 1 }
+        }
+
+        if (activeTimer === 'break' && nextBreak === 0) {
+          return { ...current, focus: current.focus, breakTime: 5 * 60, running: false, cycles: current.cycles }
+        }
+
+        return {
+          ...current,
+          focus: nextFocus,
+          breakTime: nextBreak,
+        }
+      })
+    }, 1000)
+
+    return () => window.clearInterval(interval)
+  }, [activeTimer, pomodoro.running])
 
   const pendingCount = tasks.filter((task) => !task.done).length
   const doneCount = tasks.filter((task) => task.done).length
@@ -101,18 +161,12 @@ function App() {
 
   const prompts = useMemo(() => {
     if (pendingCount === 0) {
-      return [
-        'Tudo em ordem.',
-        'Use a lista para capturar novas pendencias.',
-        'Feche o dia sem ruido.',
-      ]
+      return ['Tudo em ordem.', 'Capture novas pendencias quando surgirem.', 'Feche o dia sem ruido.']
     }
 
     return [
       `Proxima prioridade: ${nextTask?.title ?? 'Nenhuma tarefa aberta'}.`,
-      focusStreak > 1
-        ? 'Ha mais de uma acao urgente em aberto.'
-        : 'Um passo curto pode destravar o resto.',
+      focusStreak > 1 ? 'Ha mais de uma acao urgente em aberto.' : 'Um passo curto pode destravar o resto.',
       doneCount > 0 ? `${doneCount} item(ns) ja foram finalizados.` : 'Comece pela tarefa mais curta.',
     ]
   }, [doneCount, focusStreak, nextTask, pendingCount])
@@ -155,6 +209,17 @@ function App() {
     await navigator.clipboard.writeText(dailySummary)
   }
 
+  function resetPomodoro() {
+    setPomodoro({ focus: 25 * 60, breakTime: 5 * 60, running: false, cycles: 1 })
+    setActiveTimer('focus')
+  }
+
+  function togglePomodoro() {
+    setPomodoro((current) => ({ ...current, running: !current.running }))
+  }
+
+  const currentPomodoroSeconds = activeTimer === 'focus' ? pomodoro.focus : pomodoro.breakTime
+
   return (
     <main className="app-shell">
       <section className="hero">
@@ -179,31 +244,31 @@ function App() {
                 <path
                   d="M26 49l12 12 24-26"
                   fill="none"
-                  stroke="#d7ff4f"
+                  stroke="#c17746"
                   strokeWidth="8"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
                 <defs>
                   <linearGradient id="brandStroke" x1="8" x2="88" y1="12" y2="84">
-                    <stop offset="0%" stopColor="#76f6d6" />
-                    <stop offset="100%" stopColor="#1f6cff" />
+                    <stop offset="0%" stopColor="#8f5b3d" />
+                    <stop offset="100%" stopColor="#c17746" />
                   </linearGradient>
                   <linearGradient id="brandStroke2" x1="8" x2="88" y1="84" y2="12">
-                    <stop offset="0%" stopColor="#0f254f" />
-                    <stop offset="100%" stopColor="#19b8d7" />
+                    <stop offset="0%" stopColor="#f3efe6" />
+                    <stop offset="100%" stopColor="#d7b894" />
                   </linearGradient>
                 </defs>
               </svg>
             </div>
             <div>
               <p className="eyebrow">Focus Loop</p>
-              <h1>Capture tarefas rapidas sem sair do fluxo.</h1>
+              <h1>Capture tarefas, faça pausas e feche o dia com clareza.</h1>
             </div>
           </div>
           <p className="lede">
-            Um painel simples para anotar o que apareceu, separar por urgencia e revisar o que
-            ficou concluido no fim do dia.
+            Um painel leve para organizar tarefas, usar Pomodoro e acompanhar a agenda em uma
+            interface clara, quente e confortável.
           </p>
 
           <div className="stats">
@@ -233,6 +298,23 @@ function App() {
         </aside>
       </section>
 
+      <nav className="screen-switcher" aria-label="Telas do aplicativo">
+        {[
+          { id: 'tarefas', label: 'Tarefas' },
+          { id: 'pomodoro', label: 'Pomodoro' },
+          { id: 'agenda', label: 'Agenda' },
+        ].map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={screen === item.id ? 'screen-chip active' : 'screen-chip'}
+            onClick={() => setScreen(item.id as Screen)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
+
       <section className="workspace">
         <section className="insight-strip" aria-label="Resumo do momento">
           {prompts.map((prompt) => (
@@ -254,91 +336,160 @@ function App() {
           </button>
         </section>
 
-        <form className="quick-add" onSubmit={handleAddTask}>
-          <label>
-            <span>Tarefa</span>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Ex: responder cliente, pagar conta, marcar consulta"
-            />
-          </label>
-          <label>
-            <span>Detalhe curto</span>
-            <input
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="Opcional: contexto de 1 linha"
-            />
-          </label>
-          <label>
-            <span>Prioridade</span>
-            <select
-              value={priority}
-              onChange={(event) => setPriority(event.target.value as Priority)}
-            >
-              {priorities.map((level) => (
-                <option key={level} value={level}>
-                  {level}
-                </option>
+        {screen === 'tarefas' && (
+          <>
+            <form className="quick-add" onSubmit={handleAddTask}>
+              <label>
+                <span>Tarefa</span>
+                <input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Ex: responder cliente, pagar conta, marcar consulta"
+                />
+              </label>
+              <label>
+                <span>Detalhe curto</span>
+                <input
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="Opcional: contexto de 1 linha"
+                />
+              </label>
+              <label>
+                <span>Prioridade</span>
+                <select
+                  value={priority}
+                  onChange={(event) => setPriority(event.target.value as Priority)}
+                >
+                  {priorities.map((level) => (
+                    <option key={level} value={level}>
+                      {level}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit">Salvar tarefa</button>
+            </form>
+
+            <div className="view-switcher" role="tablist" aria-label="Filtrar lista">
+              {(['Todas', ...priorities] as ViewFilter[]).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  className={view === item ? 'chip active' : 'chip'}
+                  onClick={() => setView(item)}
+                  aria-pressed={view === item}
+                >
+                  {item}
+                </button>
               ))}
-            </select>
-          </label>
-          <button type="submit">Salvar tarefa</button>
-        </form>
+            </div>
 
-        <div className="view-switcher" role="tablist" aria-label="Filtrar lista">
-          {(['Todas', ...priorities] as ViewFilter[]).map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={view === item ? 'chip active' : 'chip'}
-              onClick={() => setView(item)}
-              aria-pressed={view === item}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
+            <div className="columns">
+              {groupedTasks.map(({ level, items }) => (
+                <section key={level} className="lane">
+                  <header>
+                    <h3>{level}</h3>
+                    <span>{items.length}</span>
+                  </header>
 
-        <div className="columns">
-          {groupedTasks.map(({ level, items }) => (
-            <section key={level} className="lane">
-              <header>
-                <h3>{level}</h3>
-                <span>{items.length}</span>
-              </header>
+                  <div className="task-list">
+                    {items.length === 0 ? (
+                      <p className="empty-state">Sem tarefas nesta faixa.</p>
+                    ) : (
+                      items.map((task) => (
+                        <button
+                          key={task.id}
+                          type="button"
+                          className="task"
+                          onClick={() => toggleTask(task.id)}
+                        >
+                          <div>
+                            <strong>{task.title}</strong>
+                            <p>{task.note || 'Sem observacao.'}</p>
+                          </div>
+                          <span>{task.done ? 'Feita' : 'Abrir'}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </section>
+              ))}
+            </div>
 
-              <div className="task-list">
-                {items.length === 0 ? (
-                  <p className="empty-state">Sem tarefas nesta faixa.</p>
-                ) : (
-                  items.map((task) => (
-                    <button
-                      key={task.id}
-                      type="button"
-                      className="task"
-                      onClick={() => toggleTask(task.id)}
-                    >
-                      <div>
-                        <strong>{task.title}</strong>
-                        <p>{task.note || 'Sem observacao.'}</p>
-                      </div>
-                      <span>{task.done ? 'Feita' : 'Abrir'}</span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </section>
-          ))}
-        </div>
+            <footer className="footer-actions">
+              <p>As tarefas concluidas continuam salvas localmente ate voce limpar a lista.</p>
+              <button type="button" className="ghost" onClick={clearDone}>
+                Limpar concluidas
+              </button>
+            </footer>
+          </>
+        )}
 
-        <footer className="footer-actions">
-          <p>As tarefas concluidas continuam salvas localmente ate voce limpar a lista.</p>
-          <button type="button" className="ghost" onClick={clearDone}>
-            Limpar concluidas
-          </button>
-        </footer>
+        {screen === 'pomodoro' && (
+          <section className="pomodoro-panel">
+            <div className="pomodoro-ring">
+              <span>Pomodoro</span>
+              <strong>{formatTime(currentPomodoroSeconds)}</strong>
+              <p>{activeTimer === 'focus' ? 'Bloco de foco' : 'Pausa curta'}</p>
+            </div>
+
+            <div className="pomodoro-actions">
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  setActiveTimer('focus')
+                  togglePomodoro()
+                }}
+              >
+                {pomodoro.running && activeTimer === 'focus' ? 'Pausar foco' : 'Iniciar foco'}
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  setActiveTimer('break')
+                  togglePomodoro()
+                }}
+              >
+                {pomodoro.running && activeTimer === 'break' ? 'Pausar pausa' : 'Iniciar pausa'}
+              </button>
+              <button type="button" className="ghost" onClick={resetPomodoro}>
+                Reiniciar
+              </button>
+            </div>
+
+            <div className="pomodoro-meta">
+              <article>
+                <strong>{pomodoro.cycles}</strong>
+                <span>Ciclos</span>
+              </article>
+              <article>
+                <strong>25</strong>
+                <span>Min foco</span>
+              </article>
+              <article>
+                <strong>5</strong>
+                <span>Min pausa</span>
+              </article>
+            </div>
+          </section>
+        )}
+
+        {screen === 'agenda' && (
+          <section className="agenda-panel">
+            {agendaItems.map((item) => (
+              <article key={item.time} className="agenda-item">
+                <span>{item.time}</span>
+                <div>
+                  <strong>{item.title}</strong>
+                  <p>{item.note}</p>
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
       </section>
     </main>
   )
