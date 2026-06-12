@@ -33,6 +33,7 @@ The project uses a local Node.js backend with file-based persistence so the app 
 - `server.js` exposes the local API
 - `data/state.json` is generated automatically and stores the persisted state
 - `vite.config.ts` proxies `/api` requests to the local backend during development
+- Full details: [`docs/architecture.md`](docs/architecture.md)
 
 ## API Surface
 
@@ -82,6 +83,7 @@ npm run test:server
 - `server.js` - HTTP API and persistence
 - `server.test.js` - backend tests
 - `data/` - generated state storage
+- Contribution notes: [`docs/contributing.md`](docs/contributing.md)
 
 ## Notes
 
