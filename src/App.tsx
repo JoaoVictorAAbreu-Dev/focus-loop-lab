@@ -14,37 +14,21 @@ type Task = {
   createdAt: number
 }
 
-const STORAGE_KEY = 'focus-loop.tasks.v1'
-const POMODORO_KEY = 'focus-loop.pomodoro.v1'
+type PomodoroState = {
+  focus: number
+  breakTime: number
+  running: boolean
+  cycles: number
+  activeTimer: 'focus' | 'break'
+}
 
+type ApiState = {
+  tasks: Task[]
+  pomodoro: PomodoroState
+}
+
+const API_BASE = '/api'
 const priorities: Priority[] = ['Agora', 'Hoje', 'Depois']
-
-const seedTasks: Task[] = [
-  {
-    id: 'seed-1',
-    title: 'Responder a mensagem que destrava o trabalho',
-    note: 'Ação curta que remove bloqueio sem virar contexto novo.',
-    priority: 'Agora',
-    done: false,
-    createdAt: Date.now() - 1000 * 60 * 60 * 4,
-  },
-  {
-    id: 'seed-2',
-    title: 'Pagar uma conta ou agendar algo pendente',
-    note: 'Evita esquecer um compromisso administrativo do dia.',
-    priority: 'Hoje',
-    done: false,
-    createdAt: Date.now() - 1000 * 60 * 60 * 8,
-  },
-  {
-    id: 'seed-3',
-    title: 'Organizar a lista da semana',
-    note: 'Boa candidata para depois do expediente.',
-    priority: 'Depois',
-    done: true,
-    createdAt: Date.now() - 1000 * 60 * 60 * 24,
-  },
-]
 
 const agendaItems = [
   { time: '08:30', title: 'Planejar o dia', note: 'Ver primeira tarefa e definir foco.' },
@@ -53,25 +37,12 @@ const agendaItems = [
   { time: '17:30', title: 'Fechamento', note: 'Revisar concluídas e preparar amanhã.' },
 ]
 
-function createTask(title: string, note: string, priority: Priority): Task {
-  return {
-    id: crypto.randomUUID(),
-    title,
-    note,
-    priority,
-    done: false,
-    createdAt: Date.now(),
-  }
-}
-
-function loadPomodoroState() {
-  try {
-    const saved = localStorage.getItem(POMODORO_KEY)
-    if (!saved) return { focus: 25 * 60, breakTime: 5 * 60, running: false, cycles: 1 }
-    return JSON.parse(saved) as { focus: number; breakTime: number; running: boolean; cycles: number }
-  } catch {
-    return { focus: 25 * 60, breakTime: 5 * 60, running: false, cycles: 1 }
-  }
+const fallbackPomodoro: PomodoroState = {
+  focus: 25 * 60,
+  breakTime: 5 * 60,
+  running: false,
+  cycles: 1,
+  activeTimer: 'focus',
 }
 
 function formatTime(seconds: number) {
@@ -81,60 +52,101 @@ function formatTime(seconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
 }
 
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    ...init,
+  })
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`)
+  }
+
+  return response.json() as Promise<T>
+}
+
 function App() {
   const [screen, setScreen] = useState<Screen>('tarefas')
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (!saved) return seedTasks
-
-    try {
-      const parsed = JSON.parse(saved) as Task[]
-      return parsed.length > 0 ? parsed : seedTasks
-    } catch {
-      return seedTasks
-    }
-  })
+  const [state, setState] = useState<ApiState | null>(null)
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
   const [priority, setPriority] = useState<Priority>('Agora')
   const [view, setView] = useState<ViewFilter>('Todas')
-  const [pomodoro, setPomodoro] = useState(loadPomodoroState)
-  const [activeTimer, setActiveTimer] = useState<'focus' | 'break'>('focus')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks))
-  }, [tasks])
+    let active = true
+
+    async function loadState() {
+      try {
+        setLoading(true)
+        const data = await apiFetch<ApiState>('/state')
+        if (active) setState(data)
+      } catch {
+        if (active) setError('Nao foi possivel carregar os dados do backend.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    loadState()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const tasks = useMemo(() => state?.tasks ?? [], [state])
+  const pomodoro = state?.pomodoro ?? fallbackPomodoro
 
   useEffect(() => {
-    localStorage.setItem(POMODORO_KEY, JSON.stringify(pomodoro))
-  }, [pomodoro])
-
-  useEffect(() => {
-    if (!pomodoro.running) return
+    if (!state?.pomodoro.running) return
 
     const interval = window.setInterval(() => {
-      setPomodoro((current) => {
-        const nextFocus = activeTimer === 'focus' ? Math.max(0, current.focus - 1) : current.focus
-        const nextBreak = activeTimer === 'break' ? Math.max(0, current.breakTime - 1) : current.breakTime
+      setState((current) => {
+        if (!current) return current
+        const timerKey = current.pomodoro.activeTimer === 'focus' ? 'focus' : 'breakTime'
+        const nextValue = Math.max(0, current.pomodoro[timerKey] - 1)
 
-        if (activeTimer === 'focus' && nextFocus === 0) {
-          return { ...current, focus: 25 * 60, breakTime: current.breakTime, running: false, cycles: current.cycles + 1 }
+        if (nextValue > 0) {
+          void apiFetch('/pomodoro', {
+            method: 'PATCH',
+            body: JSON.stringify({
+              [timerKey]: nextValue,
+              running: current.pomodoro.running,
+              activeTimer: current.pomodoro.activeTimer,
+            }),
+          })
+          return {
+            ...current,
+            pomodoro: { ...current.pomodoro, [timerKey]: nextValue } as PomodoroState,
+          }
         }
 
-        if (activeTimer === 'break' && nextBreak === 0) {
-          return { ...current, focus: current.focus, breakTime: 5 * 60, running: false, cycles: current.cycles }
+        const resetValue = current.pomodoro.activeTimer === 'focus' ? 25 * 60 : 5 * 60
+        const nextTimer: PomodoroState['activeTimer'] =
+          current.pomodoro.activeTimer === 'focus' ? 'break' : 'focus'
+        const nextPomodoro: PomodoroState = {
+          ...current.pomodoro,
+          [timerKey]: resetValue,
+          running: false,
+          cycles:
+            current.pomodoro.activeTimer === 'focus'
+              ? current.pomodoro.cycles + 1
+              : current.pomodoro.cycles,
+          activeTimer: nextTimer,
         }
 
-        return {
-          ...current,
-          focus: nextFocus,
-          breakTime: nextBreak,
-        }
+        void apiFetch('/pomodoro', {
+          method: 'PATCH',
+          body: JSON.stringify(nextPomodoro),
+        })
+          return { ...current, pomodoro: nextPomodoro }
       })
     }, 1000)
 
     return () => window.clearInterval(interval)
-  }, [activeTimer, pomodoro.running])
+  }, [state?.pomodoro.running, state?.pomodoro.activeTimer])
 
   const pendingCount = tasks.filter((task) => !task.done).length
   const doneCount = tasks.filter((task) => task.done).length
@@ -184,41 +196,79 @@ function App() {
     ].join('\n')
   }, [doneCount, nextTask, pendingCount, topPending])
 
-  function handleAddTask(event: FormEvent<HTMLFormElement>) {
+  async function refreshState() {
+    const data = await apiFetch<ApiState>('/state')
+    setState(data)
+  }
+
+  async function handleAddTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const trimmedTitle = title.trim()
     if (!trimmedTitle) return
 
-    setTasks((current) => [createTask(trimmedTitle, note.trim(), priority), ...current])
+    await apiFetch('/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ title: trimmedTitle, note: note.trim(), priority }),
+    })
+
     setTitle('')
     setNote('')
     setPriority('Agora')
+    await refreshState()
   }
 
-  function toggleTask(id: string) {
-    setTasks((current) =>
-      current.map((task) => (task.id === id ? { ...task, done: !task.done } : task)),
-    )
+  async function toggleTask(id: string, done: boolean) {
+    await apiFetch(`/tasks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ done }),
+    })
+    await refreshState()
   }
 
-  function clearDone() {
-    setTasks((current) => current.filter((task) => !task.done))
+  async function clearDone() {
+    const completed = tasks.filter((task) => task.done)
+    await Promise.all(completed.map((task) => apiFetch(`/tasks/${task.id}`, { method: 'DELETE' })))
+    await refreshState()
   }
 
   async function copyDailySummary() {
     await navigator.clipboard.writeText(dailySummary)
   }
 
-  function resetPomodoro() {
-    setPomodoro({ focus: 25 * 60, breakTime: 5 * 60, running: false, cycles: 1 })
-    setActiveTimer('focus')
+  async function resetPomodoro() {
+    await apiFetch('/pomodoro', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        focus: 25 * 60,
+        breakTime: 5 * 60,
+        running: false,
+        cycles: 1,
+        activeTimer: 'focus',
+      }),
+    })
+    await refreshState()
   }
 
-  function togglePomodoro() {
-    setPomodoro((current) => ({ ...current, running: !current.running }))
+  async function togglePomodoro() {
+    await apiFetch('/pomodoro', {
+      method: 'PATCH',
+      body: JSON.stringify({ ...pomodoro, running: !pomodoro.running }),
+    })
+    await refreshState()
   }
 
-  const currentPomodoroSeconds = activeTimer === 'focus' ? pomodoro.focus : pomodoro.breakTime
+  if (loading) {
+    return (
+      <main className="app-shell">
+        <section className="summary-card">
+          <div>
+            <p className="card-kicker">Carregando</p>
+            <h3>Conectando ao backend local.</h3>
+          </div>
+        </section>
+      </main>
+    )
+  }
 
   return (
     <main className="app-shell">
@@ -292,11 +342,21 @@ function App() {
           <span className="card-label">Proxima acao</span>
           <h2>{nextTask?.title ?? 'Nada pendente'}</h2>
           <p>{nextTask?.note ?? 'Seu quadro esta limpo. Bom momento para encerrar o dia.'}</p>
-          <button type="button" onClick={() => nextTask && toggleTask(nextTask.id)}>
+          <button type="button" onClick={() => nextTask && toggleTask(nextTask.id, !nextTask.done)}>
             {nextTask?.done ? 'Reabrir tarefa' : 'Marcar como concluida'}
           </button>
         </aside>
       </section>
+
+      {error ? (
+        <section className="summary-card">
+          <div>
+            <p className="card-kicker">Backend</p>
+            <h3>{error}</h3>
+            <p>Verifique se o servidor local esta rodando em paralelo com o Vite.</p>
+          </div>
+        </section>
+      ) : null}
 
       <nav className="screen-switcher" aria-label="Telas do aplicativo">
         {[
@@ -402,7 +462,7 @@ function App() {
                           key={task.id}
                           type="button"
                           className="task"
-                          onClick={() => toggleTask(task.id)}
+                          onClick={() => toggleTask(task.id, !task.done)}
                         >
                           <div>
                             <strong>{task.title}</strong>
@@ -418,7 +478,7 @@ function App() {
             </div>
 
             <footer className="footer-actions">
-              <p>As tarefas concluidas continuam salvas localmente ate voce limpar a lista.</p>
+              <p>As tarefas concluidas continuam salvas no backend ate voce limpar a lista.</p>
               <button type="button" className="ghost" onClick={clearDone}>
                 Limpar concluidas
               </button>
@@ -430,30 +490,27 @@ function App() {
           <section className="pomodoro-panel">
             <div className="pomodoro-ring">
               <span>Pomodoro</span>
-              <strong>{formatTime(currentPomodoroSeconds)}</strong>
-              <p>{activeTimer === 'focus' ? 'Bloco de foco' : 'Pausa curta'}</p>
+              <strong>{formatTime(pomodoro.activeTimer === 'focus' ? pomodoro.focus : pomodoro.breakTime)}</strong>
+              <p>{pomodoro.activeTimer === 'focus' ? 'Bloco de foco' : 'Pausa curta'}</p>
             </div>
 
             <div className="pomodoro-actions">
-              <button
-                type="button"
-                className="primary"
-                onClick={() => {
-                  setActiveTimer('focus')
-                  togglePomodoro()
-                }}
-              >
-                {pomodoro.running && activeTimer === 'focus' ? 'Pausar foco' : 'Iniciar foco'}
+              <button type="button" className="primary" onClick={togglePomodoro}>
+                {pomodoro.running ? 'Pausar' : 'Iniciar'}
               </button>
               <button
                 type="button"
                 className="ghost"
-                onClick={() => {
-                  setActiveTimer('break')
-                  togglePomodoro()
+                onClick={async () => {
+                  const nextTimer = pomodoro.activeTimer === 'focus' ? 'break' : 'focus'
+                  await apiFetch('/pomodoro', {
+                    method: 'PATCH',
+                    body: JSON.stringify({ ...pomodoro, activeTimer: nextTimer, running: false }),
+                  })
+                  await refreshState()
                 }}
               >
-                {pomodoro.running && activeTimer === 'break' ? 'Pausar pausa' : 'Iniciar pausa'}
+                Alternar foco/pausa
               </button>
               <button type="button" className="ghost" onClick={resetPomodoro}>
                 Reiniciar

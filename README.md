@@ -1,73 +1,76 @@
-# React + TypeScript + Vite
+# Focus Loop
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Focus Loop is a lightweight productivity workspace for keeping quick tasks, short focus sessions, and a simple daily agenda in one place.
 
-Currently, two official plugins are available:
+## What it does
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Capture tasks quickly without leaving the workflow.
+- Group tasks by priority: `Agora`, `Hoje`, and `Depois`.
+- Use a built-in Pomodoro screen for short focus blocks.
+- Review a compact daily agenda.
+- Copy a daily summary to paste in chat or notes.
+- Persist data through a small local backend.
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- React
+- TypeScript
+- Vite
+- Node.js HTTP server
 
-## Expanding the ESLint configuration
+## Project Structure
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- `src/` - frontend application
+- `server.js` - local API and file-based persistence
+- `data/state.json` - stored app state created at runtime
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Requirements
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- Node.js 22+
+- npm 10+
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Setup
+
+```powershell
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Development
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Run the frontend and backend together:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```powershell
+npm run dev
 ```
+
+This starts:
+
+- Vite on `http://127.0.0.1:4173`
+- API server on `http://127.0.0.1:3001`
+
+## Build
+
+```powershell
+npm run build
+```
+
+## Lint
+
+```powershell
+npm run lint
+```
+
+## API
+
+- `GET /api/health` - health check
+- `GET /api/state` - returns tasks and Pomodoro state
+- `POST /api/tasks` - creates a task
+- `PATCH /api/tasks/:id` - updates a task
+- `DELETE /api/tasks/:id` - removes a task
+- `PATCH /api/pomodoro` - updates Pomodoro state
+
+## Notes
+
+- The backend stores data in `data/state.json`.
+- The file is created automatically on first run.
+- The app is intentionally simple and local-first.
