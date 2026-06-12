@@ -238,6 +238,30 @@
   max-width: 60ch;
 }
 
+.shortcut-strip {
+  border-radius: 20px;
+  padding: 14px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px dashed rgba(126, 93, 61, 0.16);
+}
+
+.shortcut-strip span {
+  color: #8f5b3d;
+  font-weight: 700;
+}
+
+.shortcut-strip p {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(177, 125, 95, 0.09);
+  color: #6f6358;
+}
+
 .screen-switcher {
   width: min(1120px, 100%);
   margin: 0 auto;
@@ -527,6 +551,10 @@
   .summary-card {
     display: grid;
     align-items: start;
+  }
+
+  .shortcut-strip {
+    display: grid;
   }
 
   .edit-banner {

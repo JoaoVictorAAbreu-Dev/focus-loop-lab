@@ -197,6 +197,31 @@ function App() {
     ].join('\n')
   }, [doneCount, nextTask, pendingCount, topPending])
 
+  useEffect(() => {
+    function handleKeydown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null
+      const typing =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable === true
+
+      if (typing) return
+
+      if (event.ctrlKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        void navigator.clipboard.writeText(dailySummary)
+        return
+      }
+
+      if (event.key === '1') setScreen('tarefas')
+      if (event.key === '2') setScreen('pomodoro')
+      if (event.key === '3') setScreen('agenda')
+    }
+
+    window.addEventListener('keydown', handleKeydown)
+    return () => window.removeEventListener('keydown', handleKeydown)
+  }, [dailySummary])
+
   async function refreshState() {
     const data = await apiFetch<ApiState>('/state')
     setState(data)
@@ -418,6 +443,14 @@ function App() {
           <button type="button" className="ghost" onClick={copyDailySummary}>
             Copiar resumo
           </button>
+        </section>
+
+        <section className="shortcut-strip" aria-label="Atalhos">
+          <span>Atalhos</span>
+          <p>1 tarefas</p>
+          <p>2 pomodoro</p>
+          <p>3 agenda</p>
+          <p>Ctrl + K copia resumo</p>
         </section>
 
         {screen === 'tarefas' && (
