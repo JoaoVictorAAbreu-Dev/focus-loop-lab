@@ -211,6 +211,22 @@
   gap: 18px;
 }
 
+.edit-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 20px;
+  background: rgba(177, 125, 95, 0.1);
+  border: 1px solid rgba(143, 91, 61, 0.12);
+}
+
+.edit-banner span {
+  color: #8f5b3d;
+  font-weight: 700;
+}
+
 .summary-card h3 {
   margin: 0 0 8px;
   font-size: 1.15rem;
@@ -331,15 +347,30 @@
 }
 
 .task {
-  text-align: left;
   border-radius: 20px;
-  padding: 16px;
   border: 1px solid rgba(126, 93, 61, 0.1);
   background: rgba(255, 255, 255, 0.72);
+  color: inherit;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.task-body {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 4px;
   color: inherit;
   display: flex;
   justify-content: space-between;
   gap: 16px;
+  cursor: pointer;
+}
+
+.task-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .task strong {
@@ -356,6 +387,15 @@
   color: #8f5b3d;
   font-size: 0.82rem;
   white-space: nowrap;
+}
+
+.task-link {
+  border: 0;
+  background: transparent;
+  color: #8f5b3d;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
 }
 
 .empty-state {
@@ -489,6 +529,10 @@
     align-items: start;
   }
 
+  .edit-banner {
+    display: grid;
+  }
+
   .agenda-item {
     grid-template-columns: 1fr;
   }
@@ -518,5 +562,9 @@
 
   .agenda-item {
     grid-template-columns: 1fr;
+  }
+
+  .task-body {
+    align-items: start;
   }
 }
