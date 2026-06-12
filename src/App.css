@@ -30,6 +30,7 @@
 .focus-card,
 .quick-add,
 .insight-strip,
+.summary-card,
 .lane,
 .footer-actions {
   border: 1px solid rgba(143, 184, 255, 0.16);
@@ -197,6 +198,26 @@
   color: #dbe4ff;
 }
 
+.summary-card {
+  border-radius: 24px;
+  padding: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 18px;
+}
+
+.summary-card h3 {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+}
+
+.summary-card p {
+  margin: 0;
+  color: #9da9c5;
+  max-width: 60ch;
+}
+
 .quick-add {
   display: grid;
   grid-template-columns: 1.2fr 1fr 0.7fr auto;
@@ -356,6 +377,11 @@
   .insight-strip {
     display: grid;
   }
+
+  .summary-card {
+    display: grid;
+    align-items: start;
+  }
 }
 
 @media (max-width: 640px) {
@@ -368,7 +394,8 @@
   .lane,
   .footer-actions,
   .quick-add,
-  .insight-strip {
+  .insight-strip,
+  .summary-card {
     border-radius: 20px;
     padding: 18px;
   }

@@ -80,6 +80,10 @@ function App() {
   const doneCount = tasks.filter((task) => task.done).length
   const nextTask = tasks.find((task) => !task.done) ?? tasks[0]
   const focusStreak = tasks.filter((task) => !task.done && task.priority === 'Agora').length
+  const topPending = tasks
+    .filter((task) => !task.done)
+    .sort((left, right) => priorities.indexOf(left.priority) - priorities.indexOf(right.priority))
+    .slice(0, 3)
 
   const groupedTasks = useMemo(
     () =>
@@ -113,6 +117,19 @@ function App() {
     ]
   }, [doneCount, focusStreak, nextTask, pendingCount])
 
+  const dailySummary = useMemo(() => {
+    const pendingList = topPending.map((task) => `- ${task.title} [${task.priority}]`).join('\n')
+    return [
+      'Resumo Focus Loop',
+      `Pendentes: ${pendingCount}`,
+      `Concluidas: ${doneCount}`,
+      `Proxima acao: ${nextTask?.title ?? 'Nenhuma tarefa aberta'}`,
+      '',
+      'Top 3 pendencias:',
+      pendingList || '- Nenhuma pendencia',
+    ].join('\n')
+  }, [doneCount, nextTask, pendingCount, topPending])
+
   function handleAddTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const trimmedTitle = title.trim()
@@ -132,6 +149,10 @@ function App() {
 
   function clearDone() {
     setTasks((current) => current.filter((task) => !task.done))
+  }
+
+  async function copyDailySummary() {
+    await navigator.clipboard.writeText(dailySummary)
   }
 
   return (
@@ -217,6 +238,20 @@ function App() {
           {prompts.map((prompt) => (
             <p key={prompt}>{prompt}</p>
           ))}
+        </section>
+
+        <section className="summary-card" aria-label="Resumo para compartilhar">
+          <div>
+            <p className="card-kicker">Compartilhar</p>
+            <h3>Resumo do dia pronto para copiar.</h3>
+            <p>
+              Use isso para colar no WhatsApp, no Slack ou no seu notebook e manter o foco sem
+              reescrever manualmente.
+            </p>
+          </div>
+          <button type="button" className="ghost" onClick={copyDailySummary}>
+            Copiar resumo
+          </button>
         </section>
 
         <form className="quick-add" onSubmit={handleAddTask}>
