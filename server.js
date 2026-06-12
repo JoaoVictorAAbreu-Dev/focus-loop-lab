@@ -85,7 +85,7 @@ function collectBody(req) {
   })
 }
 
-const server = http.createServer(async (req, res) => {
+export async function requestHandler(req, res) {
   if (!req.url) {
     sendJson(res, 400, { error: 'Missing URL' })
     return
@@ -172,8 +172,14 @@ const server = http.createServer(async (req, res) => {
   }
 
   sendJson(res, 404, { error: 'Not found' })
+}
+
+const server = http.createServer((req, res) => {
+  void requestHandler(req, res)
 })
 
-server.listen(port, () => {
-  console.log(`Focus Loop API running on http://127.0.0.1:${port}`)
-})
+if (process.argv[1] && process.argv[1].endsWith('server.js')) {
+  server.listen(port, () => {
+    console.log(`Focus Loop API running on http://127.0.0.1:${port}`)
+  })
+}
