@@ -72,6 +72,7 @@ function App() {
   const [note, setNote] = useState('')
   const [priority, setPriority] = useState<Priority>('Agora')
   const [view, setView] = useState<ViewFilter>('Todas')
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -206,15 +207,38 @@ function App() {
     const trimmedTitle = title.trim()
     if (!trimmedTitle) return
 
-    await apiFetch('/tasks', {
-      method: 'POST',
-      body: JSON.stringify({ title: trimmedTitle, note: note.trim(), priority }),
-    })
+    if (editingTaskId) {
+      await apiFetch(`/tasks/${editingTaskId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title: trimmedTitle, note: note.trim(), priority }),
+      })
+      setEditingTaskId(null)
+    } else {
+      await apiFetch('/tasks', {
+        method: 'POST',
+        body: JSON.stringify({ title: trimmedTitle, note: note.trim(), priority }),
+      })
+    }
 
     setTitle('')
     setNote('')
     setPriority('Agora')
     await refreshState()
+  }
+
+  function startEditingTask(task: Task) {
+    setEditingTaskId(task.id)
+    setTitle(task.title)
+    setNote(task.note)
+    setPriority(task.priority)
+    setScreen('tarefas')
+  }
+
+  function cancelEditingTask() {
+    setEditingTaskId(null)
+    setTitle('')
+    setNote('')
+    setPriority('Agora')
   }
 
   async function toggleTask(id: string, done: boolean) {
@@ -398,7 +422,7 @@ function App() {
 
         {screen === 'tarefas' && (
           <>
-            <form className="quick-add" onSubmit={handleAddTask}>
+          <form className="quick-add" onSubmit={handleAddTask}>
               <label>
                 <span>Tarefa</span>
                 <input
@@ -428,8 +452,16 @@ function App() {
                   ))}
                 </select>
               </label>
-              <button type="submit">Salvar tarefa</button>
+              <button type="submit">{editingTaskId ? 'Salvar alterações' : 'Salvar tarefa'}</button>
             </form>
+            {editingTaskId ? (
+              <div className="edit-banner">
+                <span>Editando tarefa</span>
+                <button type="button" className="ghost" onClick={cancelEditingTask}>
+                  Cancelar edição
+                </button>
+              </div>
+            ) : null}
 
             <div className="view-switcher" role="tablist" aria-label="Filtrar lista">
               {(['Todas', ...priorities] as ViewFilter[]).map((item) => (
@@ -458,20 +490,30 @@ function App() {
                       <p className="empty-state">Sem tarefas nesta faixa.</p>
                     ) : (
                       items.map((task) => (
+                    <article key={task.id} className="task">
+                      <button
+                        type="button"
+                        className="task-body"
+                        onClick={() => toggleTask(task.id, !task.done)}
+                      >
+                        <div>
+                          <strong>{task.title}</strong>
+                          <p>{task.note || 'Sem observacao.'}</p>
+                        </div>
+                        <span>{task.done ? 'Feita' : 'Abrir'}</span>
+                      </button>
+                      <div className="task-actions">
                         <button
-                          key={task.id}
                           type="button"
-                          className="task"
-                          onClick={() => toggleTask(task.id, !task.done)}
+                          className="task-link"
+                          onClick={() => startEditingTask(task)}
                         >
-                          <div>
-                            <strong>{task.title}</strong>
-                            <p>{task.note || 'Sem observacao.'}</p>
-                          </div>
-                          <span>{task.done ? 'Feita' : 'Abrir'}</span>
+                          Editar
                         </button>
-                      ))
-                    )}
+                      </div>
+                    </article>
+                  ))
+                )}
                   </div>
                 </section>
               ))}
